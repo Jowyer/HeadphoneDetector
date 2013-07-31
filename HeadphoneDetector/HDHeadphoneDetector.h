@@ -11,10 +11,13 @@
 
 #import "NotificationNameDefine.h"
 
-@interface HDHeadphoneDetector : NSObject{
+@interface HDHeadphoneDetector : NSObject
+{
 }
 
 @property (nonatomic, readonly) BOOL currenstateArePlugged;
+
++(HDHeadphoneDetector *)sharedDetector;
 
 - (void)headphoneArePlugged;
 - (void)headphoneAreNotPlugged;

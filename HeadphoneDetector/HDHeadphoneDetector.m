@@ -9,20 +9,60 @@
 
 void audioRouteChangeListenerCallback(void *inUserData, AudioSessionPropertyID inPropertyID, UInt32 inPropertySize, const void *inPropertyValue);
 
-@implementation HDHeadphoneDetector{
+@implementation HDHeadphoneDetector
+@synthesize currenstateArePlugged;
+#pragma mark- Life Circle
++(HDHeadphoneDetector *)sharedDetector
+{
+    static HDHeadphoneDetector *detector;
+    if(detector == nil)
+    {
+        @synchronized([self class])
+        {
+            if(detector == nil)
+            {
+                detector = [[HDHeadphoneDetector alloc] init];
+            }
+        }
+    }
+    return detector;
 }
 
-- (id)init {
+- (id)init
+{
 	self = [super init];
-	if (self) {
-		// オーディオ初期化
+	if (self)
+    {
 		AudioSessionInitialize(NULL, NULL, NULL, NULL);
-		AudioSessionAddPropertyListener(
-				kAudioSessionProperty_AudioRouteChange,
-				audioRouteChangeListenerCallback,
-				(__bridge void *)self);
+		AudioSessionAddPropertyListener(kAudioSessionProperty_AudioRouteChange, audioRouteChangeListenerCallback, ( void *)self);
 	}
 	return self;
+}
+
+- (void) dealloc
+{
+	AudioSessionRemovePropertyListenerWithUserData(kAudioSessionProperty_AudioRouteChange, audioRouteChangeListenerCallback, ( void *)self);
+    
+    [super dealloc];
+}
+
+#pragma mark- Public Methods
+-(BOOL) currenstateArePlugged
+{
+	// thanks to: http://ios-dev-blog.com/how-to-check-that-headphones-are-attached-to-device/
+	BOOL result = NO;
+    
+	CFStringRef route;
+	UInt32 propertySize = sizeof(CFStringRef);
+	if (AudioSessionGetProperty(kAudioSessionProperty_AudioRoute, &propertySize, &route) == 0)
+    {
+		NSString *routeString = ( NSString *) route;
+		if ([routeString isEqualToString: @"Headphone"] == YES)
+        {
+			result = YES;
+		}
+	}
+	return result;
 }
 
 - (void) headphoneArePlugged
@@ -35,67 +75,37 @@ void audioRouteChangeListenerCallback(void *inUserData, AudioSessionPropertyID i
 	[[NSNotificationCenter defaultCenter] postNotificationName:HEADPHONE_NOT_PLUGGED object:self];
 }
 
-- (void) dealloc
+#pragma mark- Listener Call Back
+void audioRouteChangeListenerCallback(void *inUserData, AudioSessionPropertyID inPropertyID, UInt32 inPropertySize, const void *inPropertyValue)
 {
-	AudioSessionRemovePropertyListenerWithUserData(
-			kAudioSessionProperty_AudioRouteChange,
-			audioRouteChangeListenerCallback,
-			(__bridge void *)self);
-
-	DLog(@"HeadPhone Detector dealloc!!!");
-}
-
--(BOOL) currenstateArePlugged
-{
-	// 情報元 : http://ios-dev-blog.com/how-to-check-that-headphones-are-attached-to-device/
-	BOOL result = NO;
-
-	CFStringRef route;
-	UInt32 propertySize = sizeof(CFStringRef);
-	if (AudioSessionGetProperty(kAudioSessionProperty_AudioRoute, &propertySize, &route) == 0)	{
-		NSString *routeString = (__bridge_transfer NSString *) route;
-		if ([routeString isEqualToString: @"Headphone"] == YES) {
-			result = YES;
-		}
-	}
-	return result;
-}
-
-void audioRouteChangeListenerCallback(
-		void *inUserData,
-		AudioSessionPropertyID inPropertyID,
-		UInt32 inPropertySize,
-		const void *inPropertyValue)
-{
-
-	if( inPropertyID != kAudioSessionProperty_AudioRouteChange){
+	if( inPropertyID != kAudioSessionProperty_AudioRouteChange)
+    {
 		return;
 	}
 
 	CFDictionaryRef routeChangeDictionary = inPropertyValue;
 
-	// オーディを経路変化の理由
 	CFNumberRef routeChangeReasonRef = CFDictionaryGetValue(routeChangeDictionary, CFSTR(kAudioSession_AudioRouteChangeKey_Reason));
 	SInt32 routeChangeReason;
 	CFNumberGetValue(routeChangeReasonRef, kCFNumberSInt32Type, &routeChangeReason);
 
-	if( routeChangeReason == kAudioSessionRouteChangeReason_OldDeviceUnavailable ||
-        routeChangeReason == kAudioSessionRouteChangeReason_NewDeviceAvailable){
-
+	if( routeChangeReason == kAudioSessionRouteChangeReason_OldDeviceUnavailable || routeChangeReason == kAudioSessionRouteChangeReason_NewDeviceAvailable)
+    {
 		CFStringRef route;
 		UInt32 propertySize = sizeof(CFStringRef);
         
-		if(AudioSessionGetProperty(kAudioSessionProperty_AudioRoute, &propertySize, &route) == 0){
+		if(AudioSessionGetProperty(kAudioSessionProperty_AudioRoute, &propertySize, &route) == 0)
+        {
+            HDHeadphoneDetector *headphoneDetector = (HDHeadphoneDetector *)inUserData;
+            NSString *routeString = (NSString *)route;
 
-            HDHeadphoneDetector *headphoneDetector  = (__bridge HDHeadphoneDetector *)inUserData;
-            NSString *routeString                   = (__bridge_transfer NSString *)route;
-
-            if([routeString isEqualToString:@"Headphone"] == YES){
+            if([routeString isEqualToString:@"Headphone"] == YES)
+            {
                 [headphoneDetector headphoneArePlugged];
-                NSLog(@"Attached");
-            } else {
+            }
+            else
+            {
                 [headphoneDetector headphoneAreNotPlugged];
-                NSLog(@"Not Attached");
             }
 		}
 	}
